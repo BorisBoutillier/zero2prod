@@ -31,14 +31,21 @@ jobs:
     name: Test
     # Containers must run in Linux based operating systems
     runs-on: ubuntu-latest
+    # Service containers to run alongside the `test` container job
     services:
-      image: postgres:14
-      env:
-        POSTGRES_USER: postgres
-        POSTGRES_PASSWORD: password
-        POSTGRES_DB: postgres
-      ports:
-        - 5432:5432
+      # Label used to access the service container
+      postgres:
+        # Docker Hub image
+        image: postgres:14
+        # Environment variables scoped only for the `postgres` element
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        # When you map ports using the ports keyword, GitHub uses the --publish command to publish the container’s ports to the Docker host
+        # Opens tcp port 5432 on the host and service container
+        ports:
+          - 5432:5432
     steps:
       # Downloads a copy of the code in your repository before running CI tests
       - name: Check out repository code
@@ -59,7 +66,7 @@ jobs:
           --no-default-features
           --locked
       - name: Create app user in Postgres
-         run: |
+        run: |
           sudo apt-get install postgresql-client
 
           # Create the application user
@@ -69,13 +76,14 @@ jobs:
           # Grant create db privileges to the app user
           GRANT_QUERY="ALTER USER ${APP_USER} CREATEDB;"
           PGPASSWORD="password" psql -U "postgres" -h "localhost" -c "${GRANT_QUERY}"
+
       - name: Migrate database
         run: SKIP_DOCKER=true ./scripts/init_db.sh
 
       - name: Run tests
         run: cargo test
-      
-      - name : Check that queries are fresh
+
+      - name: Check that queries are fresh
         run: cargo sqlx prepare --workspace --check -- --all-targets
 
   # `fmt` container job
@@ -91,9 +99,18 @@ jobs:
       - name: Enforce formatting
         run: cargo fmt --check
 
+  # `clippy` container job
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    env:
+      # This environment variable forces sqlx to use its offline mode,
+      # which means that it will not attempt to connect to a database
+      # when running the tests. It'll instead use the cached query results.
+      # We check that the cached query results are up-to-date in another job,
+      # to speed up the overall CI pipeline.
+      # This will all be covered in detail in chapter 5.
+      SQLX_OFFLINE: true
     steps:
       - uses: actions/checkout@v4
       - name: Install the Rust toolchain
