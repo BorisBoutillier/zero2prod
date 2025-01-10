@@ -6,7 +6,7 @@ pub struct Settings {
     pub application: ApplicationSettings,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: String,
