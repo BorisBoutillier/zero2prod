@@ -4,18 +4,65 @@ use actix_web::{dev::Server, web, App, HttpServer};
 use sqlx::PgPool;
 use tracing_actix_web::TracingLogger;
 
-use crate::routes::*;
+use crate::{configuration::Settings, email_client::EmailClient, routes::*};
 
-pub fn run(listener: TcpListener, connection_pool: PgPool) -> Result<Server, std::io::Error> {
-    let connection_pool = web::Data::new(connection_pool);
+pub fn run(
+    listener: TcpListener,
+    db_pool: PgPool,
+    email_client: EmailClient,
+) -> Result<Server, std::io::Error> {
+    let db_pool = web::Data::new(db_pool);
+    let email_client = web::Data::new(email_client);
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscriptions))
-            .app_data(connection_pool.clone())
+            .app_data(db_pool.clone())
+            .app_data(email_client.clone())
     })
     .listen(listener)?
     .run();
     Ok(server)
+}
+pub struct Application {
+    server: Server,
+    port: u16,
+    db_pool: PgPool,
+}
+impl Application {
+    pub async fn build(configuration: Settings) -> Result<Application, std::io::Error> {
+        let db_pool = PgPool::connect_lazy_with(configuration.database.connect_options());
+        let sender_email = configuration
+            .email_client
+            .sender()
+            .expect("Invalid sender email address");
+        let timeout = configuration.email_client.timeout();
+        let email_client = EmailClient::new(
+            configuration.email_client.base_url,
+            sender_email,
+            configuration.email_client.authorization_token,
+            timeout,
+        );
+
+        let listener = TcpListener::bind(format!(
+            "{}:{}",
+            configuration.application.host, configuration.application.port
+        ))?;
+        let port = listener.local_addr().unwrap().port();
+        Ok(Application {
+            server: run(listener, db_pool.clone(), email_client)?,
+            port,
+            db_pool,
+        })
+    }
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+    pub fn db_pool(&self) -> PgPool {
+        self.db_pool.clone()
+    }
+    pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
+        self.server.await
+    }
 }
