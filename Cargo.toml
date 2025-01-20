@@ -26,6 +26,10 @@ tracing-actix-web = "0.7"
 secrecy = { version = "0.8" , features = [ "serde"] }
 unicode-segmentation = "1"
 validator = "0.19"
+serde_json = "1.0.135"
+rand = { version = "0.8" , features = [ "std_rng"] }
+thiserror = "1"
+anyhow = "1"
 
 [dependencies.sqlx]
 version = "0.8"
@@ -40,8 +44,10 @@ fake = "2.9"
 # module to test multiple iteration with randomized fake inputs
 quickcheck = "1.0.3"
 quickcheck_macros = "1"
-rand = "0.8"
 tokio = { version = "1", features= [ "rt", "macros"]}
-
 # Http Server mockup
 wiremock = "0.6"
+# Pattern matching for html links
+linkify = "0.10"
+# Parsing of html URI
+url = "2.5.4"
