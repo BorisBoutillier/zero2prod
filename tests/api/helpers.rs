@@ -1,3 +1,6 @@
+use argon2::password_hash::SaltString;
+use argon2::{Argon2, PasswordHasher};
+use reqwest::redirect::Policy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -30,11 +33,14 @@ pub struct TestApp {
     pub db_pool: PgPool,
     pub email_server: MockServer,
     pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub api_client: reqwest::Client,
 }
 
 impl TestApp {
     pub async fn post_subscriptions(&self, body: &str) -> reqwest::Response {
-        reqwest::Client::new()
+        self.api_client
             .post(format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body.to_string())
@@ -66,12 +72,60 @@ impl TestApp {
         ConfirmationLinks { html, text }
     }
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
-        reqwest::Client::new()
+        let (username, password) = self.test_user().await;
+        self.api_client
             .post(format!("{}/newsletters", &self.address))
+            .basic_auth(username, Some(password))
             .json(&body)
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+    async fn store(&self) {
+        let salt = SaltString::generate(&mut rand::thread_rng());
+        let password_hash = Argon2::default()
+            .hash_password(self.password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+
+        sqlx::query!(
+            "INSERT INTO users (user_id, username, password_hash)
+    VALUES ($1, $2, $3)",
+            Uuid::new_v4(),
+            self.username,
+            password_hash,
+        )
+        .execute(&self.db_pool)
+        .await
+        .expect("Failed to create test users.");
+    }
+    pub async fn test_user(&self) -> (String, String) {
+        (self.username.clone(), self.password.clone())
+    }
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .post(format!("{}/login", &self.address))
+            // This `reqwest` method makes sure that the body is URL-encoded
+            // and the `Content-Type` header is set accordingly.
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+    // Our tests will only look at the HTML page, therefore
+    // we do not expose the underlying reqwest::Response
+    pub async fn get_login_html(&self) -> String {
+        self.api_client
+            .get(format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+            .text()
+            .await
+            .unwrap()
     }
 }
 
@@ -103,12 +157,24 @@ pub async fn spawn_app() -> TestApp {
     let db_pool = application.db_pool();
     tokio::spawn(application.run_until_stopped());
 
-    TestApp {
+    let api_client = reqwest::Client::builder()
+        .redirect(Policy::none())
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let username = Uuid::new_v4().to_string();
+    let password = Uuid::new_v4().to_string();
+    let test_app = TestApp {
         address,
         db_pool,
         email_server,
         port,
-    }
+        username,
+        password,
+        api_client,
+    };
+    test_app.store().await;
+    test_app
 }
 
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
@@ -134,4 +200,9 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to migrate the database");
     connection_pool
+}
+
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    assert_eq!(response.status().as_u16(), 303);
+    assert_eq!(response.headers().get("Location").unwrap(), location);
 }
