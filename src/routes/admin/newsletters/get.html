@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Change Password</title>
+</head>
+
+<body>
+    <p>Newsletter publication</p>
+    <form action="/admin/newsletter" method="post">
+        <label>Title password
+            <input type="text" placeholder="title" name="title">
+        </label>
+        <br>
+        <label>HTML content
+            <textarea placeholder="HTML content" name="html_content" rows="10" cols="30">
+        </label>
+        <br>
+        <label>Text content
+            <textarea placeholder="Text content" name="text_content" rows="10" cols="30">
+        </label>
+        <br>
+        <button type="submit">Publish</button>
+    </form>
+    <p><a href="/admin/dashboard">&lt;- Back</a></p>
+</body>
+
+</html>

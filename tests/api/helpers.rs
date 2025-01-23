@@ -71,12 +71,13 @@ impl TestApp {
         let text = get_link(body["text_body"].as_str().unwrap());
         ConfirmationLinks { html, text }
     }
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
-        let (username, password) = self.test_user().await;
+    pub async fn post_newsletters<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
         self.api_client
-            .post(format!("{}/newsletters", &self.address))
-            .basic_auth(username, Some(password))
-            .json(&body)
+            .post(format!("{}/admin/newsletters", &self.address))
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -98,9 +99,6 @@ impl TestApp {
         .execute(&self.db_pool)
         .await
         .expect("Failed to create test users.");
-    }
-    pub async fn test_user(&self) -> (String, String) {
-        (self.username.clone(), self.password.clone())
     }
     pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
     where

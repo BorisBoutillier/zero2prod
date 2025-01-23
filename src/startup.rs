@@ -42,12 +42,13 @@ async fn run(
                     .route("/dashboard", web::get().to(admin_dashboard))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password))
-                    .route("/logout", web::post().to(admin_logout)),
+                    .route("/logout", web::post().to(admin_logout))
+                    .route("/newsletters", web::get().to(send_newsletters))
+                    .route("/newsletters", web::post().to(publish_newsletters)),
             )
             .route("/health_check", web::get().to(health_check))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
-            .route("/newsletters", web::post().to(publish_newsletters))
             .route("/subscriptions", web::post().to(subscriptions))
             .route(
                 "/subscriptions/confirm",
