@@ -1,13 +1,16 @@
 use std::net::TcpListener;
 
 use actix_session::{storage::RedisSessionStore, SessionMiddleware};
-use actix_web::{cookie::Key, dev::Server, web, App, HttpServer};
+use actix_web::{cookie::Key, dev::Server, middleware::from_fn, web, App, HttpServer};
 use actix_web_flash_messages::{storage::CookieMessageStore, FlashMessagesFramework};
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use tracing_actix_web::TracingLogger;
 
-use crate::{configuration::Settings, email_client::EmailClient, routes::*};
+use crate::{
+    authentication::reject_anonymous_users, configuration::Settings, email_client::EmailClient,
+    routes::*,
+};
 
 async fn run(
     listener: TcpListener,
@@ -33,6 +36,14 @@ async fn run(
                 secret_key.clone(),
             ))
             .route("/", web::get().to(home))
+            .service(
+                web::scope("/admin")
+                    .wrap(from_fn(reject_anonymous_users))
+                    .route("/dashboard", web::get().to(admin_dashboard))
+                    .route("/password", web::get().to(change_password_form))
+                    .route("/password", web::post().to(change_password))
+                    .route("/logout", web::post().to(admin_logout)),
+            )
             .route("/health_check", web::get().to(health_check))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
